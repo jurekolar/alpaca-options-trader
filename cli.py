@@ -141,7 +141,11 @@ def cmd_backtest(args: argparse.Namespace, config: BotConfig) -> int:
 
     settings = AlpacaSettings.from_env(paper=True)
     factory = AlpacaClientFactory(settings)
-    market_data = AlpacaMarketData(factory.option_data_client(), factory.stock_data_client())
+    market_data = AlpacaMarketData(
+        factory.option_data_client(),
+        factory.stock_data_client(),
+        stock_feed=config.market_data.stock_feed,
+    )
     engine = BacktestEngine(config, market_data)
     start = _parse_datetime(args.start or config.backtest.start)
     end = _parse_datetime(args.end or config.backtest.end)
@@ -201,7 +205,11 @@ def run_scan(
     settings = AlpacaSettings.from_env(paper=paper)
     factory = AlpacaClientFactory(settings)
     account = factory.account_state(verify_market_data=True)
-    market_data = AlpacaMarketData(factory.option_data_client(), factory.stock_data_client())
+    market_data = AlpacaMarketData(
+        factory.option_data_client(),
+        factory.stock_data_client(),
+        stock_feed=config.market_data.stock_feed,
+    )
     today = date.today()
     expiration_gte = today + timedelta(days=config.universe.min_dte)
     expiration_lte = today + timedelta(days=config.universe.max_dte)

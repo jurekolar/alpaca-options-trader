@@ -22,6 +22,10 @@ def _bool(value: Any, default: bool) -> bool:
     return default if value is None else bool(value)
 
 
+def _str(value: Any, default: str) -> str:
+    return default if value is None else str(value)
+
+
 def _str_list(value: Any, default: list[str]) -> list[str]:
     if value is None:
         return list(default)
@@ -212,6 +216,22 @@ class BacktestConfig:
 
 
 @dataclass(frozen=True)
+class MarketDataConfig:
+    stock_feed: str = "iex"
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "MarketDataConfig":
+        stock_feed = _str(data.get("stock_feed"), "iex").lower()
+        valid_feeds = {"iex", "sip", "delayed_sip", "otc", "boats", "overnight"}
+        if stock_feed not in valid_feeds:
+            raise ValueError(
+                f"Unsupported market_data.stock_feed={stock_feed!r}; "
+                f"expected one of {', '.join(sorted(valid_feeds))}"
+            )
+        return cls(stock_feed=stock_feed)
+
+
+@dataclass(frozen=True)
 class BotConfig:
     risk: RiskConfig = field(default_factory=RiskConfig)
     liquidity: LiquidityConfig = field(default_factory=LiquidityConfig)
@@ -220,6 +240,7 @@ class BotConfig:
     strategies: StrategyConfig = field(default_factory=StrategyConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
+    market_data: MarketDataConfig = field(default_factory=MarketDataConfig)
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "BotConfig":
@@ -231,4 +252,5 @@ class BotConfig:
             strategies=StrategyConfig.from_mapping(data.get("strategies", {})),
             scoring=ScoringConfig.from_mapping(data.get("scoring", {})),
             backtest=BacktestConfig.from_mapping(data.get("backtest", {})),
+            market_data=MarketDataConfig.from_mapping(data.get("market_data", {})),
         )

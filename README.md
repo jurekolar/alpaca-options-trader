@@ -74,6 +74,15 @@ export ALPACA_SECRET_KEY="your-secret"
 
 `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` are also accepted.
 
+By default, intraday stock bars use Alpaca's `iex` feed so accounts without
+recent SIP data entitlement can still run scans. If your account has SIP access,
+set this in TOML:
+
+```toml
+[market_data]
+stock_feed = "sip"
+```
+
 ## Commands
 
 ```bash
@@ -155,6 +164,9 @@ run fails clearly.
 
 - `Missing Alpaca credentials`: export Alpaca API keys before running live data
   commands.
+- `subscription does not permit querying recent SIP data`: keep
+  `[market_data] stock_feed = "iex"` for non-SIP accounts, or switch to `sip`
+  only after adding the required Alpaca market data subscription.
 - `options market data entitlement could not be verified`: your account likely
   lacks option market data access, or the probe request failed.
 - `options trading level too low`: check `python cli.py status`. Long options
@@ -171,4 +183,3 @@ spread, liquidity, and timing risks. Small accounts are especially vulnerable to
 position concentration and commission/fee drag. Backtests can suffer from
 survivorship bias, stale chains, overfitting, and optimistic fill assumptions.
 Nothing in this project guarantees returns.
-

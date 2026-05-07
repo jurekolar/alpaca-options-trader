@@ -71,9 +71,15 @@ def _int_or_none(value: Any) -> int | None:
 
 
 class AlpacaMarketData:
-    def __init__(self, option_data_client: Any, stock_data_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        option_data_client: Any,
+        stock_data_client: Any | None = None,
+        stock_feed: str | None = "iex",
+    ) -> None:
         self.option_data_client = option_data_client
         self.stock_data_client = stock_data_client
+        self.stock_feed = stock_feed.lower() if stock_feed else None
 
     def get_option_chain(
         self,
@@ -110,21 +116,31 @@ class AlpacaMarketData:
         if self.stock_data_client is None:
             return UnderlyingSnapshot(symbol=symbol, price=0.0), None
         try:
+            from alpaca.data.enums import DataFeed
             from alpaca.data.requests import StockBarsRequest
             from alpaca.data.timeframe import TimeFrame
         except ImportError as exc:
             raise MarketDataUnavailableError("alpaca-py is not installed. Run: pip install alpaca-py") from exc
 
+        request_kwargs: dict[str, Any] = {
+            "symbol_or_symbols": symbol,
+            "timeframe": TimeFrame.Minute,
+            "start": start,
+            "end": end,
+            "limit": 390,
+        }
+        if self.stock_feed is not None:
+            try:
+                request_kwargs["feed"] = DataFeed(self.stock_feed)
+            except ValueError as exc:
+                raise MarketDataUnavailableError(
+                    f"Unsupported Alpaca stock data feed: {self.stock_feed}"
+                ) from exc
+
         try:
             response = retry_call(
                 lambda: self.stock_data_client.get_stock_bars(
-                    StockBarsRequest(
-                        symbol_or_symbols=symbol,
-                        timeframe=TimeFrame.Minute,
-                        start=start,
-                        end=end,
-                        limit=390,
-                    )
+                    StockBarsRequest(**request_kwargs)
                 ),
                 operation_name=f"stock bars {symbol}",
             )

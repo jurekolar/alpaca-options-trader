@@ -17,6 +17,10 @@ export ALPACA_SECRET_KEY="your-paper-secret"
 
 The CLI defaults to paper trading.
 
+Scans default stock bars to Alpaca's `iex` feed to avoid recent SIP data
+subscription errors. Use `[market_data] stock_feed = "sip"` only when the account
+has SIP entitlement.
+
 ## 3. Verify Account
 
 ```bash
@@ -70,4 +74,3 @@ live_trading_enabled = true
 export ALLOW_LIVE_TRADING=true
 python cli.py live-trade --i-understand-this-can-lose-money
 ```
-

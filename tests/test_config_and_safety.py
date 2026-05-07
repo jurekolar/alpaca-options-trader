@@ -15,6 +15,7 @@ class ConfigAndSafetyTests(unittest.TestCase):
         self.assertFalse(config.execution.live_trading_enabled)
         self.assertFalse(config.risk.allow_naked_short_options)
         self.assertFalse(config.universe.allow_zero_dte)
+        self.assertEqual(config.market_data.stock_feed, "iex")
 
     def test_live_gate_requires_all_three_controls(self) -> None:
         config = BotConfig()
@@ -32,4 +33,3 @@ class ConfigAndSafetyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

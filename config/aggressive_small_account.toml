@@ -29,6 +29,9 @@ order_timeout_seconds = 30
 close_positions_before_eod = true
 liquidation_minutes_before_close = 12
 
+[market_data]
+stock_feed = "iex"
+
 [universe]
 symbols = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "AMD", "TSLA"]
 excluded_symbols = []

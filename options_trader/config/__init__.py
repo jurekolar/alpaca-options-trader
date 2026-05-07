@@ -6,6 +6,7 @@ from options_trader.config.models import (
     BotConfig,
     ExecutionConfig,
     LiquidityConfig,
+    MarketDataConfig,
     RiskConfig,
     ScoringConfig,
     StrategyConfig,
@@ -17,10 +18,10 @@ __all__ = [
     "BotConfig",
     "ExecutionConfig",
     "LiquidityConfig",
+    "MarketDataConfig",
     "RiskConfig",
     "ScoringConfig",
     "StrategyConfig",
     "UniverseConfig",
     "load_config",
 ]
-
