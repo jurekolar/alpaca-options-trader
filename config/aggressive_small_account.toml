@@ -66,8 +66,9 @@ risk_reward_weight = 0.06
 min_trade_score = 62.0
 
 [backtest]
-start = "2024-01-01"
-end = "2024-03-01"
+start = "auto"
+end = "auto"
+auto_lookback_days = 5
 entry_slippage_pct = 0.08
 exit_slippage_pct = 0.08
 commission_per_contract = 0.0

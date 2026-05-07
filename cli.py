@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import logging
 from pathlib import Path
 import sys
 
-from options_trader.alpaca import AlpacaClientFactory, AlpacaExecutionClient, AlpacaMarketData, AlpacaSettings
+from options_trader.alpaca import (
+    AlpacaClientFactory,
+    AlpacaExecutionClient,
+    AlpacaMarketData,
+    AlpacaSettings,
+    parse_occ_option_symbol,
+)
 from options_trader.alpaca.execution import OrderBuilder
 from options_trader.backtesting import BacktestEngine
 from options_trader.config import BotConfig, load_config
@@ -147,12 +153,17 @@ def cmd_backtest(args: argparse.Namespace, config: BotConfig) -> int:
         stock_feed=config.market_data.stock_feed,
     )
     engine = BacktestEngine(config, market_data)
-    start = _parse_datetime(args.start or config.backtest.start)
-    end = _parse_datetime(args.end or config.backtest.end)
+    symbols = _backtest_symbols(args)
+    start, end = _resolve_backtest_window(args, config, symbols)
     if args.strategy == StrategyKind.LONG_OPTIONS.value:
         result = engine.run_long_option_backtest(args.option_symbol, start, end)
     else:
-        result = engine.run_vertical_spread_backtest(args.long_symbol, args.short_symbol, start, end)
+        result = engine.run_vertical_spread_backtest(
+            args.long_symbol,
+            args.short_symbol,
+            start,
+            end,
+        )
     report = format_backtest_report(result)
     report_path = Path(args.report_path)
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -242,13 +253,75 @@ def run_scan(
     return ranked, decision, factory
 
 
-def _parse_datetime(value: str) -> datetime:
+def _backtest_symbols(args: argparse.Namespace) -> list[str]:
+    if args.strategy == StrategyKind.LONG_OPTIONS.value:
+        return list(args.option_symbol)
+    return [args.long_symbol, args.short_symbol]
+
+
+def _resolve_backtest_window(
+    args: argparse.Namespace,
+    config: BotConfig,
+    symbols: list[str],
+    now: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    current = current.astimezone(timezone.utc)
+
+    start_value = args.start if args.start is not None else config.backtest.start
+    end_value = args.end if args.end is not None else config.backtest.end
+
+    if _is_auto_datetime(end_value):
+        end = _infer_auto_backtest_end(symbols, current)
+    else:
+        end = _parse_datetime(str(end_value), date_as_end=True)
+
+    if _is_auto_datetime(start_value):
+        start = end - timedelta(days=config.backtest.auto_lookback_days)
+    else:
+        start = _parse_datetime(str(start_value), date_as_end=False)
+
+    if start >= end:
+        raise OptionsTraderError(
+            "Invalid backtest window: "
+            f"start {start.isoformat()} must be before end {end.isoformat()}"
+        )
+    return start, end
+
+
+def _is_auto_datetime(value: object) -> bool:
+    return str(value).strip().lower() in {"", "auto"}
+
+
+def _infer_auto_backtest_end(symbols: list[str], now: datetime) -> datetime:
+    expiration_dates = []
+    for symbol in symbols:
+        try:
+            expiration_dates.append(parse_occ_option_symbol(symbol).expiration)
+        except ValueError as exc:
+            raise OptionsTraderError(
+                f"Unsupported option symbol for automatic backtest dates: {symbol}"
+            ) from exc
+    expiration_end = datetime.combine(
+        min(expiration_dates) + timedelta(days=1),
+        time.min,
+        tzinfo=timezone.utc,
+    )
+    return min(now, expiration_end)
+
+
+def _parse_datetime(value: str, *, date_as_end: bool = False) -> datetime:
     if len(value) == 10:
-        return datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+        parsed_date = date.fromisoformat(value)
+        if date_as_end:
+            parsed_date += timedelta(days=1)
+        return datetime.combine(parsed_date, time.min, tzinfo=timezone.utc)
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    return parsed.astimezone(timezone.utc)
 
 
 if __name__ == "__main__":

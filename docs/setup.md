@@ -55,6 +55,9 @@ Use `--dry-run` first.
 ## 6. Backtest
 
 Use concrete OCC option symbols. The bot will not backtest synthetic symbols.
+The default config uses `start = "auto"` and `end = "auto"`, so the CLI chooses
+a recent lookback window around the supplied contracts. Use `--start` and `--end`
+to force a specific historical window.
 
 ```bash
 python cli.py backtest --strategy long_options --option-symbol SPY260508C00500000

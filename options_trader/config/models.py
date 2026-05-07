@@ -192,8 +192,9 @@ class ScoringConfig:
 
 @dataclass(frozen=True)
 class BacktestConfig:
-    start: str = "2024-01-01"
-    end: str = "2024-03-01"
+    start: str = "auto"
+    end: str = "auto"
+    auto_lookback_days: int = 5
     entry_slippage_pct: float = 0.05
     exit_slippage_pct: float = 0.05
     commission_per_contract: float = 0.0
@@ -203,9 +204,13 @@ class BacktestConfig:
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "BacktestConfig":
+        auto_lookback_days = _int(data.get("auto_lookback_days"), 5)
+        if auto_lookback_days < 1:
+            raise ValueError("backtest.auto_lookback_days must be at least 1")
         return cls(
-            start=str(data.get("start", "2024-01-01")),
-            end=str(data.get("end", "2024-03-01")),
+            start=str(data.get("start", "auto")),
+            end=str(data.get("end", "auto")),
+            auto_lookback_days=auto_lookback_days,
             entry_slippage_pct=_float(data.get("entry_slippage_pct"), 0.05),
             exit_slippage_pct=_float(data.get("exit_slippage_pct"), 0.05),
             commission_per_contract=_float(data.get("commission_per_contract"), 0.0),

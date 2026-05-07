@@ -160,6 +160,18 @@ The backtester requires real Alpaca historical option bars. It calculates:
 If Alpaca has no historical options data for a requested contract and period, the
 run fails clearly.
 
+By default, backtest dates are `auto`: the CLI uses the supplied OCC option
+symbols to choose a recent lookback window, capped at expiration for expired
+contracts. Override the window when needed:
+
+```bash
+python cli.py backtest \
+  --strategy long_options \
+  --option-symbol SPY260508C00500000 \
+  --start 2026-05-06 \
+  --end 2026-05-07
+```
+
 ## Troubleshooting
 
 - `Missing Alpaca credentials`: export Alpaca API keys before running live data

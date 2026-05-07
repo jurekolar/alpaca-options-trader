@@ -207,8 +207,12 @@ class AlpacaMarketData:
             ) from exc
         bars = self._barset_to_domain(response)
         if not any(bars.values()):
+            requested_symbols = ", ".join(option_symbols)
             raise HistoricalDataUnavailableError(
-                "Alpaca returned no historical option bars for the requested period; no synthetic fallback used"
+                "Alpaca returned no historical option bars for "
+                f"{requested_symbols} between {start.isoformat()} and {end.isoformat()}; "
+                "confirm the contract traded during that window or pass --start/--end explicitly. "
+                "No synthetic fallback used."
             )
         return bars
 

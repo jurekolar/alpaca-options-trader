@@ -68,7 +68,9 @@ class BacktestEngine:
         bars_by_symbol = self.data_source.get_historical_bars(option_symbols, start, end)
         if not bars_by_symbol or not any(bars_by_symbol.values()):
             raise HistoricalDataUnavailableError(
-                "Alpaca historical option bars are unavailable for this period; backtest aborted"
+                "Alpaca historical option bars are unavailable for "
+                f"{', '.join(option_symbols)} between {start.isoformat()} and {end.isoformat()}; "
+                "backtest aborted"
             )
 
         cash = self.config.risk.starting_cash
@@ -98,16 +100,28 @@ class BacktestEngine:
         start: datetime,
         end: datetime,
     ) -> BacktestResult:
-        bars_by_symbol = self.data_source.get_historical_bars([long_symbol, short_symbol], start, end)
+        bars_by_symbol = self.data_source.get_historical_bars(
+            [long_symbol, short_symbol],
+            start,
+            end,
+        )
         long_bars = bars_by_symbol.get(long_symbol, [])
         short_bars = bars_by_symbol.get(short_symbol, [])
         if not long_bars or not short_bars:
+            missing = []
+            if not long_bars:
+                missing.append(long_symbol)
+            if not short_bars:
+                missing.append(short_symbol)
             raise HistoricalDataUnavailableError(
-                "Alpaca historical option bars are unavailable for one or both spread legs"
+                "Alpaca historical option bars are unavailable for "
+                f"{', '.join(missing)} between {start.isoformat()} and {end.isoformat()}"
             )
         paired = list(zip(long_bars, short_bars, strict=False))
         if len(paired) < 2:
-            raise HistoricalDataUnavailableError("Not enough synchronized option bars for spread backtest")
+            raise HistoricalDataUnavailableError(
+                "Not enough synchronized option bars for spread backtest"
+            )
 
         cash = self.config.risk.starting_cash
         entry_long, entry_short = paired[0]
@@ -147,7 +161,9 @@ class BacktestEngine:
             if self.config.backtest.end_of_day_liquidation:
                 reason = "end_of_day_liquidation"
 
-        fees = 2 * (self.config.backtest.commission_per_contract + self.config.backtest.fees_per_contract)
+        fees = 2 * (
+            self.config.backtest.commission_per_contract + self.config.backtest.fees_per_contract
+        )
         pnl = (exit_debit - entry_debit) * 100 - fees * 2
         trade = SimulatedTrade(
             symbol=f"{long_symbol}/{short_symbol}",
