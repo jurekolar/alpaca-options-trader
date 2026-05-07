@@ -6,7 +6,6 @@ from options_trader.domain import (
     OptionContract,
     OptionLeg,
     OptionRight,
-    Position,
     StrategyKind,
     TradeAction,
     TradeCandidate,
@@ -127,4 +126,3 @@ class WheelStrategy(Strategy):
             )
             candidates.append(candidate)
         return candidates
-

@@ -115,6 +115,7 @@ python cli.py backtest --strategy long_options --option-symbol SPY260508C0050000
 python cli.py backtest --strategy vertical_spreads --long-symbol SPY260508C00500000 --short-symbol SPY260508C00501000
 python cli.py report --path reports/latest_backtest.md
 python cli.py close-position SPY260508C00500000 --qty 1
+python cli.py auto-close-eod --dry-run
 ```
 
 Live trading is blocked unless all three gates pass:
@@ -122,6 +123,7 @@ Live trading is blocked unless all three gates pass:
 ```bash
 export ALLOW_LIVE_TRADING=true
 python cli.py live-trade --i-understand-this-can-lose-money
+python cli.py auto-close-eod --live --i-understand-this-can-lose-money
 ```
 
 Also set this in TOML:

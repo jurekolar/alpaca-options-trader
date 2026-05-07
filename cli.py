@@ -15,6 +15,8 @@ from options_trader.alpaca import (
     AlpacaExecutionClient,
     AlpacaMarketData,
     AlpacaSettings,
+    MarketSessionTiming,
+    get_market_session_timing,
     parse_occ_option_symbol,
 )
 from options_trader.alpaca.execution import OrderBuilder
@@ -22,6 +24,7 @@ from options_trader.backtesting import BacktestEngine
 from options_trader.config import BotConfig, load_config, load_dotenv
 from options_trader.domain import (
     OptionContract,
+    Position,
     StrategyKind,
     TradeCandidate,
     UnderlyingSnapshot,
@@ -135,6 +138,20 @@ def build_parser() -> argparse.ArgumentParser:
     close.add_argument("--i-understand-this-can-lose-money", action="store_true")
     close.set_defaults(func=cmd_close_position)
 
+    auto_close = subparsers.add_parser(
+        "auto-close-eod",
+        help="Close open option positions during the configured EOD liquidation window",
+    )
+    auto_close.add_argument("--dry-run", action="store_true", help="Inspect positions only")
+    auto_close.add_argument("--live", action="store_true", help="Use live account instead of paper")
+    auto_close.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow closing outside the EOD window",
+    )
+    auto_close.add_argument("--i-understand-this-can-lose-money", action="store_true")
+    auto_close.set_defaults(func=cmd_auto_close_eod)
+
     report = subparsers.add_parser("report", help="Print a saved report")
     report.add_argument("--path", default="reports/latest_backtest.md")
     report.set_defaults(func=cmd_report)
@@ -220,7 +237,10 @@ def cmd_paper_trade(args: argparse.Namespace, config: BotConfig) -> int:
     print(format_scan_report(ranked, decision))
     if args.dry_run or not decision.accepted:
         return 0
-    execution = AlpacaExecutionClient(factory.trading_client(), OrderBuilder())
+    trading_client = factory.trading_client()
+    if _entry_orders_blocked_near_close(config, trading_client):
+        return 0
+    execution = AlpacaExecutionClient(trading_client, OrderBuilder())
     order = execution.submit_candidate(
         decision.accepted[0],
         config.execution.slippage_tolerance_pct,
@@ -235,7 +255,10 @@ def cmd_live_trade(args: argparse.Namespace, config: BotConfig) -> int:
     print(format_scan_report(ranked, decision))
     if args.dry_run or not decision.accepted:
         return 0
-    execution = AlpacaExecutionClient(factory.trading_client(), OrderBuilder())
+    trading_client = factory.trading_client()
+    if _entry_orders_blocked_near_close(config, trading_client):
+        return 0
+    execution = AlpacaExecutionClient(trading_client, OrderBuilder())
     order = execution.submit_candidate(
         decision.accepted[0],
         config.execution.slippage_tolerance_pct,
@@ -310,6 +333,133 @@ def cmd_close_position(args: argparse.Namespace, config: BotConfig) -> int:
     order = execution.close_position(args.symbol, args.qty)
     print(f"Close request submitted: {getattr(order, 'id', order)}")
     return 0
+
+
+def cmd_auto_close_eod(args: argparse.Namespace, config: BotConfig) -> int:
+    if args.live:
+        assert_live_trading_allowed(config, args.i_understand_this_can_lose_money)
+    settings = AlpacaSettings.from_env(paper=not args.live)
+    factory = AlpacaClientFactory(settings)
+    trading_client = factory.trading_client()
+    timing = get_market_session_timing(trading_client, config.execution)
+    print(_format_market_session_timing(timing))
+    _require_eod_auto_close_window(config, timing, force=args.force)
+
+    positions = factory.positions()
+    close_positions = _select_eod_option_positions(positions)
+    skipped_positions = [
+        position
+        for position in positions
+        if _position_qty(position) != 0 and position not in close_positions
+    ]
+    print(
+        "Spread-aware multi-leg close orders are not implemented yet; "
+        "option positions will be closed one symbol at a time as reported by Alpaca."
+    )
+    if skipped_positions:
+        print(f"Skipped non-option positions: {len(skipped_positions)}")
+    if not close_positions:
+        print("No open option positions to close.")
+        return 0
+
+    print("Option positions selected for EOD close:")
+    for position in close_positions:
+        print(
+            f"- {position.symbol}: qty={position.qty:g}, "
+            f"asset_class={position.asset_class}, market_value=${position.market_value:.2f}"
+        )
+    if args.dry_run:
+        print("Dry run: no close requests submitted.")
+        return 0
+
+    execution = AlpacaExecutionClient(trading_client, OrderBuilder())
+    for position in close_positions:
+        order = execution.close_position(position.symbol)
+        print(f"Close request submitted for {position.symbol}: {getattr(order, 'id', order)}")
+    return 0
+
+
+def _entry_orders_blocked_near_close(config: BotConfig, trading_client: object) -> bool:
+    timing = get_market_session_timing(trading_client, config.execution)
+    if not timing.in_liquidation_window:
+        return False
+    print(
+        "New entries blocked near close: "
+        f"{_format_minutes(timing.minutes_until_close)} until market close at "
+        f"{_format_datetime(timing.market_close_time)}. "
+        f"Configured liquidation window is {timing.liquidation_minutes_before_close} minutes."
+    )
+    return True
+
+
+def _require_eod_auto_close_window(
+    config: BotConfig,
+    timing: MarketSessionTiming,
+    *,
+    force: bool,
+) -> None:
+    if force:
+        print("Force enabled: EOD window checks bypassed.")
+        return
+    if not config.execution.close_positions_before_eod:
+        raise OptionsTraderError(
+            "EOD auto-close is disabled by execution.close_positions_before_eod=false"
+        )
+    if timing.in_liquidation_window:
+        return
+    raise OptionsTraderError(
+        "EOD auto-close refused outside the configured liquidation window "
+        f"({timing.liquidation_minutes_before_close} minutes before close). "
+        "Use --force to override."
+    )
+
+
+def _select_eod_option_positions(positions: list[Position]) -> list[Position]:
+    return [
+        position
+        for position in positions
+        if _position_qty(position) != 0 and _is_option_position(position)
+    ]
+
+
+def _is_option_position(position: Position) -> bool:
+    asset_class = str(position.asset_class or "").lower()
+    if asset_class in {"option", "us_option"}:
+        return True
+    try:
+        parse_occ_option_symbol(position.symbol)
+    except ValueError:
+        return False
+    return True
+
+
+def _position_qty(position: Position) -> float:
+    try:
+        return float(position.qty)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _format_market_session_timing(timing: MarketSessionTiming) -> str:
+    return (
+        "Market session: "
+        f"open={timing.is_open}, "
+        f"close={_format_datetime(timing.market_close_time)}, "
+        f"minutes_until_close={_format_minutes(timing.minutes_until_close)}, "
+        f"in_eod_window={timing.in_liquidation_window}"
+    )
+
+
+def _format_datetime(value: datetime | None) -> str:
+    if value is None:
+        return "unknown"
+    return value.isoformat()
+
+
+def _format_minutes(value: float | None) -> str:
+    if value is None:
+        return "unknown"
+    return f"{value:.1f} minutes"
 
 
 def cmd_report(args: argparse.Namespace, _config: BotConfig) -> int:
