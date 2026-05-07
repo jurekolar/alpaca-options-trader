@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import logging
-import os
+from pathlib import Path
 from typing import Any
 
+from options_trader.config.env import environment_with_dotenv
 from options_trader.domain import AccountState, Position
 from options_trader.exceptions import MarketDataUnavailableError, MissingCredentialsError
 from options_trader.retry import retry_call
@@ -32,6 +34,18 @@ def _to_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _first_env(env: Mapping[str, str], *names: str) -> str | None:
+    for name in names:
+        value = env.get(name)
+        if value:
+            return value
+    return None
+
+
+def _truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class AlpacaSettings:
     api_key: str
@@ -40,15 +54,46 @@ class AlpacaSettings:
     sandbox: bool = False
 
     @classmethod
-    def from_env(cls, paper: bool = True) -> "AlpacaSettings":
-        api_key = os.getenv("ALPACA_API_KEY_ID") or os.getenv("APCA_API_KEY_ID")
-        secret_key = os.getenv("ALPACA_SECRET_KEY") or os.getenv("APCA_API_SECRET_KEY")
+    def from_env(
+        cls,
+        paper: bool = True,
+        env: Mapping[str, str] | None = None,
+        dotenv_path: str | Path | None = ".env",
+    ) -> "AlpacaSettings":
+        environ = environment_with_dotenv(env, dotenv_path)
+        mode = "paper" if paper else "live"
+        prefix = "ALPACA_PAPER" if paper else "ALPACA_LIVE"
+        api_key = _first_env(
+            environ,
+            f"{prefix}_API_KEY_ID",
+            f"{prefix}_KEY_ID",
+            f"APCA_{mode.upper()}_API_KEY_ID",
+            "ALPACA_API_KEY_ID",
+            "APCA_API_KEY_ID",
+        )
+        secret_key = _first_env(
+            environ,
+            f"{prefix}_SECRET_KEY",
+            f"{prefix}_API_SECRET_KEY",
+            f"APCA_{mode.upper()}_SECRET_KEY",
+            f"APCA_{mode.upper()}_API_SECRET_KEY",
+            "ALPACA_SECRET_KEY",
+            "APCA_API_SECRET_KEY",
+        )
         if not api_key or not secret_key:
             raise MissingCredentialsError(
-                "Missing Alpaca credentials. Set ALPACA_API_KEY_ID and ALPACA_SECRET_KEY "
-                "(or APCA_API_KEY_ID and APCA_API_SECRET_KEY)."
+                f"Missing Alpaca {mode} credentials. Set {prefix}_API_KEY_ID and "
+                f"{prefix}_SECRET_KEY in .env or the shell. Generic "
+                "ALPACA_API_KEY_ID/ALPACA_SECRET_KEY and APCA_* variables are also accepted."
             )
-        sandbox = os.getenv("ALPACA_SANDBOX", "false").lower() == "true"
+        sandbox = _truthy(
+            _first_env(
+                environ,
+                f"{prefix}_SANDBOX",
+                f"APCA_{mode.upper()}_SANDBOX",
+                "ALPACA_SANDBOX",
+            )
+        )
         return cls(api_key=api_key, secret_key=secret_key, paper=paper, sandbox=sandbox)
 
 

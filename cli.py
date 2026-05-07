@@ -19,8 +19,13 @@ from options_trader.alpaca import (
 )
 from options_trader.alpaca.execution import OrderBuilder
 from options_trader.backtesting import BacktestEngine
-from options_trader.config import BotConfig, load_config
-from options_trader.domain import OptionContract, StrategyKind, TradeCandidate, UnderlyingSnapshot
+from options_trader.config import BotConfig, load_config, load_dotenv
+from options_trader.domain import (
+    OptionContract,
+    StrategyKind,
+    TradeCandidate,
+    UnderlyingSnapshot,
+)
 from options_trader.exceptions import LiveTradingBlockedError, OptionsTraderError
 from options_trader.logging_utils import configure_logging
 from options_trader.orchestration import generate_and_filter_candidates
@@ -45,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     configure_logging(args.verbose)
+    load_dotenv()
 
     try:
         config = load_config(args.config)

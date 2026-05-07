@@ -11,11 +11,25 @@ pip install -e .
 ## 2. Configure Credentials
 
 ```bash
-export ALPACA_API_KEY_ID="your-paper-key"
-export ALPACA_SECRET_KEY="your-paper-secret"
+cp .env.example .env
 ```
 
-The CLI defaults to paper trading.
+Edit `.env` and fill in paper credentials first:
+
+```dotenv
+ALPACA_PAPER_API_KEY_ID="your-paper-key"
+ALPACA_PAPER_SECRET_KEY="your-paper-secret"
+```
+
+Add live credentials only when you are ready to test live account readiness:
+
+```dotenv
+ALPACA_LIVE_API_KEY_ID="your-live-key"
+ALPACA_LIVE_SECRET_KEY="your-live-secret"
+```
+
+The CLI defaults to paper trading. Shell exports override `.env` values when
+both are set.
 
 Scans default stock bars to Alpaca's `iex` feed to avoid recent SIP data
 subscription errors. Use `[market_data] stock_feed = "sip"` only when the account

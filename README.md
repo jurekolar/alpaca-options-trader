@@ -65,14 +65,25 @@ python3 -m venv .venv
 pip install -e .
 ```
 
-Set Alpaca credentials:
+Set Alpaca credentials in `.env`:
 
 ```bash
-export ALPACA_API_KEY_ID="your-key"
-export ALPACA_SECRET_KEY="your-secret"
+cp .env.example .env
 ```
 
-`APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` are also accepted.
+Then edit `.env`:
+
+```dotenv
+ALPACA_PAPER_API_KEY_ID="your-paper-key"
+ALPACA_PAPER_SECRET_KEY="your-paper-secret"
+
+ALPACA_LIVE_API_KEY_ID="your-live-key"
+ALPACA_LIVE_SECRET_KEY="your-live-secret"
+```
+
+Shell exports still work and take precedence over `.env`. Generic
+`ALPACA_API_KEY_ID`/`ALPACA_SECRET_KEY` and `APCA_API_KEY_ID`/
+`APCA_API_SECRET_KEY` are also accepted for backward compatibility.
 
 By default, intraday stock bars use Alpaca's `iex` feed so accounts without
 recent SIP data entitlement can still run scans. If your account has SIP access,
@@ -201,7 +212,8 @@ python cli.py backtest \
 ## Troubleshooting
 
 - `Missing Alpaca credentials`: export Alpaca API keys before running live data
-  commands.
+  commands, or set `ALPACA_PAPER_API_KEY_ID` and `ALPACA_PAPER_SECRET_KEY` in
+  `.env`.
 - `subscription does not permit querying recent SIP data`: keep
   `[market_data] stock_feed = "iex"` for non-SIP accounts, or switch to `sip`
   only after adding the required Alpaca market data subscription.

@@ -1,5 +1,6 @@
 """Configuration loading and validation."""
 
+from options_trader.config.env import dotenv_values, environment_with_dotenv, load_dotenv
 from options_trader.config.loader import load_config
 from options_trader.config.models import (
     BacktestConfig,
@@ -23,5 +24,8 @@ __all__ = [
     "ScoringConfig",
     "StrategyConfig",
     "UniverseConfig",
+    "dotenv_values",
+    "environment_with_dotenv",
     "load_config",
+    "load_dotenv",
 ]
