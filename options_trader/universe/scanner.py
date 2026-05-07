@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from statistics import mean
 
 from options_trader.config.models import BotConfig
 from options_trader.domain import OptionContract, UnderlyingSnapshot
-from options_trader.signals.options import liquidity_score
+from options_trader.signals.options import liquidity_score, option_quality_rejections
 
 
 @dataclass(frozen=True)
@@ -56,14 +57,23 @@ class UniverseScanner:
         if not contracts:
             return 0.0, ["no option chain data"]
 
-        liquid_scores = [liquidity_score(contract, self.config.liquidity) for contract in contracts]
-        avg_liquidity = mean(liquid_scores) if liquid_scores else 0.0
-        affordable = [
+        today = date.today()
+        eligible = [
             contract
             for contract in contracts
-            if contract.ask is not None and contract.ask <= self.config.universe.max_contract_price
+            if not option_quality_rejections(
+                contract,
+                self.config.liquidity,
+                self.config.universe,
+                today,
+            )
         ]
-        capital_efficiency = min(100.0, len(affordable) / max(1, len(contracts)) * 140.0)
+        if not eligible:
+            return 0.0, [f"no strategy-eligible contracts out of {len(contracts)}"]
+
+        liquid_scores = [liquidity_score(contract, self.config.liquidity) for contract in eligible]
+        avg_liquidity = mean(liquid_scores) if liquid_scores else 0.0
+        capital_efficiency = min(100.0, len(eligible) * 10.0)
         volatility = 50.0
         if underlying.realized_volatility is not None:
             volatility = max(0.0, min(100.0, underlying.realized_volatility * 100.0))
@@ -85,8 +95,7 @@ class UniverseScanner:
                 f"liquidity={avg_liquidity:.1f}",
                 f"volatility={volatility:.1f}",
                 f"intraday_opportunity={movement:.1f}",
-                f"affordable_contracts={len(affordable)}",
+                f"eligible_contracts={len(eligible)}",
             ]
         )
         return score, reasons
-

@@ -97,6 +97,7 @@ option_bars_delay_minutes = 0
 ```bash
 python cli.py status
 python cli.py scan
+python cli.py research-universe --backtest-top 5
 python cli.py paper-trade --dry-run
 python cli.py paper-trade
 python cli.py backtest --strategy long_options --option-symbol SPY260508C00500000
@@ -127,6 +128,21 @@ live_trading_enabled = true
   loss equal to debit paid. Requires multi-leg support and options level 3.
 - `wheel`: Cash-secured puts and covered calls. Cash-secured puts are emitted
   only when buying power supports assignment risk plus configured buffer.
+
+## Universe Research
+
+The default configs start from a broader liquid-options basket, then
+`max_symbols_per_scan` keeps only the top-ranked names for the current session.
+Use the research command before changing the static universe:
+
+```bash
+python cli.py research-universe --backtest-top 5
+```
+
+It scans the configured symbols plus the built-in research list, generates
+trade candidates with the normal risk gates, and backtests the top accepted
+long-option or debit-spread candidates when Alpaca historical option bars are
+available. The report is saved to `reports/universe_research.md`.
 
 ## Risk Controls
 

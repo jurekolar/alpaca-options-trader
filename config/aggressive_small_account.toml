@@ -34,9 +34,9 @@ stock_feed = "iex"
 option_bars_delay_minutes = 16
 
 [universe]
-symbols = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "AMD", "TSLA"]
+symbols = ["SPY", "QQQ", "IWM", "DIA", "SMH", "TQQQ", "SQQQ", "SOXL", "AAPL", "MSFT", "NVDA", "AMD", "TSLA", "META", "AMZN", "GOOGL", "NFLX", "AVGO", "MU", "PLTR", "COIN", "MSTR", "SMCI", "HOOD", "SOFI", "UBER"]
 excluded_symbols = []
-max_symbols_per_scan = 8
+max_symbols_per_scan = 12
 max_contract_price = 0.25
 min_dte = 1
 max_dte = 7

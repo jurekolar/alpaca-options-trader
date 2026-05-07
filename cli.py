@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone
 import logging
 from pathlib import Path
+import re
 import sys
 
 from options_trader.alpaca import (
@@ -18,12 +20,21 @@ from options_trader.alpaca import (
 from options_trader.alpaca.execution import OrderBuilder
 from options_trader.backtesting import BacktestEngine
 from options_trader.config import BotConfig, load_config
-from options_trader.domain import OptionContract, StrategyKind, UnderlyingSnapshot
+from options_trader.domain import OptionContract, StrategyKind, TradeCandidate, UnderlyingSnapshot
 from options_trader.exceptions import LiveTradingBlockedError, OptionsTraderError
 from options_trader.logging_utils import configure_logging
 from options_trader.orchestration import generate_and_filter_candidates
-from options_trader.reporting import format_backtest_report, format_scan_report
+from options_trader.reporting import (
+    format_backtest_report,
+    format_scan_report,
+    format_universe_research_report,
+)
 from options_trader.risk import assert_live_trading_allowed
+from options_trader.research import (
+    CandidateBacktest,
+    backtestable_candidate_symbols,
+    research_symbol_universe,
+)
 from options_trader.signals.technical import TechnicalSnapshot
 from options_trader.universe import UniverseScanner
 
@@ -57,6 +68,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     scan = subparsers.add_parser("scan", help="Scan option chains and rank trade candidates")
     scan.set_defaults(func=cmd_scan)
+
+    research = subparsers.add_parser(
+        "research-universe",
+        help="Scan a broader liquid-options universe and backtest top candidates",
+    )
+    research.add_argument(
+        "--symbol",
+        action="append",
+        default=[],
+        help="Additional underlying symbol",
+    )
+    research.add_argument("--symbols-file", help="File containing extra symbols")
+    research.add_argument(
+        "--max-symbols",
+        type=int,
+        default=20,
+        help="Number of ranked symbols to keep after the broad scan",
+    )
+    research.add_argument(
+        "--backtest-top",
+        type=int,
+        default=5,
+        help="Number of accepted candidates to backtest; use 0 to disable",
+    )
+    research.add_argument("--report-path", default="reports/universe_research.md")
+    research.set_defaults(func=cmd_research_universe)
 
     backtest = subparsers.add_parser("backtest", help="Backtest using Alpaca historical options data")
     backtest.add_argument(
@@ -101,6 +138,74 @@ def build_parser() -> argparse.ArgumentParser:
 def cmd_scan(_args: argparse.Namespace, config: BotConfig) -> int:
     ranked, decision, _factory = run_scan(config, paper=True)
     print(format_scan_report(ranked, decision))
+    return 0
+
+
+def cmd_research_universe(args: argparse.Namespace, config: BotConfig) -> int:
+    extra_symbols = list(args.symbol)
+    if args.symbols_file:
+        extra_symbols.extend(_load_symbols_file(args.symbols_file))
+    symbols = research_symbol_universe(config.universe.symbols, extra_symbols)
+    if args.max_symbols < 1:
+        raise OptionsTraderError("--max-symbols must be at least 1")
+    if args.backtest_top < 0:
+        raise OptionsTraderError("--backtest-top cannot be negative")
+
+    research_config = replace(
+        config,
+        universe=replace(
+            config.universe,
+            symbols=symbols,
+            max_symbols_per_scan=args.max_symbols,
+        ),
+    )
+    settings = AlpacaSettings.from_env(paper=True)
+    factory = AlpacaClientFactory(settings)
+    account = factory.account_state(verify_market_data=True)
+    market_data = AlpacaMarketData(
+        factory.option_data_client(),
+        factory.stock_data_client(),
+        stock_feed=research_config.market_data.stock_feed,
+    )
+    today = date.today()
+    chains, underlyings, technicals, notes = _collect_market_context(
+        research_config,
+        market_data,
+        today,
+        tolerate_symbol_errors=True,
+    )
+    ranked = UniverseScanner(research_config).rank(list(underlyings.values()), chains)
+    ranked_symbols = {item.symbol for item in ranked if item.score > 0}
+    filtered_chains = {
+        symbol: chain for symbol, chain in chains.items() if symbol in ranked_symbols
+    }
+    decision = generate_and_filter_candidates(
+        research_config,
+        account,
+        filtered_chains,
+        underlyings,
+        technicals,
+        factory.positions(),
+        today=today,
+    )
+    backtests = _backtest_top_candidates(
+        research_config,
+        market_data,
+        decision.accepted,
+        limit=args.backtest_top,
+    )
+    report = format_universe_research_report(
+        symbols,
+        ranked,
+        decision,
+        backtests,
+        notes=notes,
+    )
+    report_path = Path(args.report_path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report + "\n", encoding="utf-8")
+    print(report)
+    print(f"\nSaved report: {report_path}")
     return 0
 
 
@@ -222,25 +327,18 @@ def run_scan(
         stock_feed=config.market_data.stock_feed,
     )
     today = date.today()
-    expiration_gte = today + timedelta(days=config.universe.min_dte)
-    expiration_lte = today + timedelta(days=config.universe.max_dte)
-    start = datetime.now(timezone.utc) - timedelta(days=1)
-    end = datetime.now(timezone.utc)
-
-    chains: dict[str, list[OptionContract]] = {}
-    underlyings: dict[str, UnderlyingSnapshot] = {}
-    technicals: dict[str, TechnicalSnapshot] = {}
-    for symbol in config.universe.symbols:
-        chains[symbol] = market_data.get_option_chain(symbol, expiration_gte, expiration_lte)
-        underlying, technical = market_data.get_underlying_intraday_context(symbol, start, end)
-        underlyings[symbol] = underlying
-        if technical:
-            technicals[symbol] = technical
-        LOGGER.info("Loaded %s contracts for %s", len(chains[symbol]), symbol)
+    chains, underlyings, technicals, _notes = _collect_market_context(
+        config,
+        market_data,
+        today,
+        tolerate_symbol_errors=False,
+    )
 
     ranked = UniverseScanner(config).rank(list(underlyings.values()), chains)
     ranked_symbols = {item.symbol for item in ranked if item.score > 0}
-    filtered_chains = {symbol: chain for symbol, chain in chains.items() if symbol in ranked_symbols}
+    filtered_chains = {
+        symbol: chain for symbol, chain in chains.items() if symbol in ranked_symbols
+    }
     decision = generate_and_filter_candidates(
         config,
         account,
@@ -251,6 +349,97 @@ def run_scan(
         today=today,
     )
     return ranked, decision, factory
+
+
+def _collect_market_context(
+    config: BotConfig,
+    market_data: AlpacaMarketData,
+    today: date,
+    *,
+    tolerate_symbol_errors: bool,
+) -> tuple[
+    dict[str, list[OptionContract]],
+    dict[str, UnderlyingSnapshot],
+    dict[str, TechnicalSnapshot],
+    list[str],
+]:
+    expiration_gte = today + timedelta(days=config.universe.min_dte)
+    expiration_lte = today + timedelta(days=config.universe.max_dte)
+    start = datetime.now(timezone.utc) - timedelta(days=1)
+    end = datetime.now(timezone.utc)
+
+    chains: dict[str, list[OptionContract]] = {}
+    underlyings: dict[str, UnderlyingSnapshot] = {}
+    technicals: dict[str, TechnicalSnapshot] = {}
+    notes: list[str] = []
+    for symbol in config.universe.symbols:
+        try:
+            chains[symbol] = market_data.get_option_chain(symbol, expiration_gte, expiration_lte)
+            LOGGER.info("Loaded %s contracts for %s", len(chains[symbol]), symbol)
+        except OptionsTraderError as exc:
+            if not tolerate_symbol_errors:
+                raise
+            chains[symbol] = []
+            notes.append(f"{symbol}: option chain unavailable ({exc})")
+        try:
+            underlying, technical = market_data.get_underlying_intraday_context(symbol, start, end)
+            underlyings[symbol] = underlying
+            if technical:
+                technicals[symbol] = technical
+        except OptionsTraderError as exc:
+            if not tolerate_symbol_errors:
+                raise
+            underlyings[symbol] = UnderlyingSnapshot(symbol=symbol, price=0.0)
+            notes.append(f"{symbol}: underlying context unavailable ({exc})")
+    return chains, underlyings, technicals, notes
+
+
+def _backtest_top_candidates(
+    config: BotConfig,
+    market_data: AlpacaMarketData,
+    candidates: list[TradeCandidate],
+    *,
+    limit: int,
+) -> list[CandidateBacktest]:
+    if limit <= 0:
+        return []
+    engine = BacktestEngine(config, market_data)
+    results: list[CandidateBacktest] = []
+    for candidate in candidates:
+        symbols = backtestable_candidate_symbols(candidate)
+        if not symbols:
+            continue
+        try:
+            start, end = _auto_backtest_window(config, symbols)
+            if candidate.strategy == StrategyKind.LONG_OPTIONS:
+                result = engine.run_long_option_backtest(symbols, start, end)
+            elif candidate.strategy == StrategyKind.VERTICAL_SPREADS and len(symbols) == 2:
+                result = engine.run_vertical_spread_backtest(symbols[0], symbols[1], start, end)
+            else:
+                continue
+            results.append(CandidateBacktest(candidate.strategy, symbols, result=result))
+        except OptionsTraderError as exc:
+            results.append(CandidateBacktest(candidate.strategy, symbols, error=str(exc)))
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _auto_backtest_window(config: BotConfig, symbols: list[str]) -> tuple[datetime, datetime]:
+    current = datetime.now(timezone.utc)
+    end = _infer_auto_backtest_end(
+        symbols,
+        _latest_allowed_option_bar_end(current, config.market_data.option_bars_delay_minutes),
+    )
+    return end - timedelta(days=config.backtest.auto_lookback_days), end
+
+
+def _load_symbols_file(path: str) -> list[str]:
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise OptionsTraderError(f"Unable to read symbols file {path}: {exc}") from exc
+    return [token for token in re.split(r"[\s,]+", text) if token]
 
 
 def _backtest_symbols(args: argparse.Namespace) -> list[str]:

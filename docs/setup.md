@@ -52,7 +52,19 @@ python cli.py paper-trade
 
 Use `--dry-run` first.
 
-## 6. Backtest
+## 6. Research The Symbol Universe
+
+Run a broad options-liquidity scan before expanding or pruning the TOML symbol
+list:
+
+```bash
+python cli.py research-universe --backtest-top 5
+```
+
+The command writes `reports/universe_research.md` with ranked symbols,
+accepted candidates, and any historical option backtests Alpaca can supply.
+
+## 7. Backtest
 
 Use concrete OCC option symbols. The bot will not backtest synthetic symbols.
 The default config uses `start = "auto"` and `end = "auto"`, so the CLI chooses
@@ -67,7 +79,7 @@ python cli.py backtest --strategy long_options --option-symbol SPY260508C0050000
 python cli.py backtest --strategy vertical_spreads --long-symbol SPY260508C00500000 --short-symbol SPY260508C00501000
 ```
 
-## 7. Live Trading
+## 8. Live Trading
 
 Live trading is disabled by default. To enable, all three controls are required:
 
