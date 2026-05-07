@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpaca-options-trader"
+version = "0.1.0"
+description = "Small-account intraday options trading framework for Alpaca with hard live-trading safeguards."
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Codex"}]
+dependencies = [
+  "alpaca-py>=0.40.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "ruff>=0.5",
+  "mypy>=1.10",
+]
+
+[project.scripts]
+alpaca-options-trader = "cli:main"
+
+[tool.setuptools]
+py-modules = ["cli"]
+
+[tool.setuptools.packages.find]
+include = ["options_trader*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+

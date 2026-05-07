@@ -1,0 +1,73 @@
+[risk]
+starting_cash = 100.0
+max_account_risk_per_trade_pct = 0.10
+max_daily_loss_pct = 0.08
+max_drawdown_pct = 0.20
+max_open_positions = 2
+max_trades_per_day = 3
+max_position_notional = 12.0
+allow_margin = false
+allow_naked_short_options = false
+emergency_exit_slippage_pct = 0.25
+
+[liquidity]
+min_open_interest = 100
+min_option_volume = 10
+max_bid_ask_spread_pct = 0.20
+min_bid = 0.01
+min_underlying_price = 1.0
+max_underlying_price = 550.0
+avoid_earnings = true
+avoid_scheduled_news = true
+
+[execution]
+paper_trading_default = true
+live_trading_enabled = false
+prefer_limit_orders = true
+slippage_tolerance_pct = 0.10
+order_timeout_seconds = 45
+close_positions_before_eod = true
+liquidation_minutes_before_close = 10
+
+[universe]
+symbols = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA"]
+excluded_symbols = []
+max_symbols_per_scan = 12
+max_contract_price = 0.10
+min_dte = 1
+max_dte = 14
+allow_zero_dte = false
+allow_one_dte = true
+
+[strategies]
+long_options_enabled = true
+wheel_enabled = true
+vertical_spreads_enabled = true
+advanced_small_account_enabled = false
+zero_dte_enabled = false
+min_options_level_long = 2
+min_options_level_spreads = 3
+min_options_level_short = 3
+wheel_min_cash_buffer_pct = 0.10
+long_stop_loss_pct = 0.45
+long_take_profit_pct = 0.80
+vertical_min_reward_risk = 1.0
+vertical_max_width = 5.0
+
+[scoring]
+liquidity_weight = 0.30
+momentum_weight = 0.22
+volatility_weight = 0.16
+capital_efficiency_weight = 0.20
+risk_reward_weight = 0.12
+min_trade_score = 55.0
+
+[backtest]
+start = "2024-01-01"
+end = "2024-03-01"
+entry_slippage_pct = 0.05
+exit_slippage_pct = 0.05
+commission_per_contract = 0.0
+fees_per_contract = 0.0
+end_of_day_liquidation = true
+optimize_parameters = false
