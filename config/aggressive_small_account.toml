@@ -31,6 +31,7 @@ liquidation_minutes_before_close = 12
 
 [market_data]
 stock_feed = "iex"
+option_bars_delay_minutes = 16
 
 [universe]
 symbols = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "AMD", "TSLA"]

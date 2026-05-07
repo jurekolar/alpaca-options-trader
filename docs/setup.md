@@ -58,6 +58,9 @@ Use concrete OCC option symbols. The bot will not backtest synthetic symbols.
 The default config uses `start = "auto"` and `end = "auto"`, so the CLI chooses
 a recent lookback window around the supplied contracts. Use `--start` and `--end`
 to force a specific historical window.
+Historical option bars use `market_data.option_bars_delay_minutes = 16` by
+default to avoid Alpaca's latest 15-minute real-time OPRA window unless the
+account has Algo Trader Plus.
 
 ```bash
 python cli.py backtest --strategy long_options --option-symbol SPY260508C00500000

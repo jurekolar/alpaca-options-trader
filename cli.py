@@ -269,14 +269,18 @@ def _resolve_backtest_window(
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     current = current.astimezone(timezone.utc)
+    latest_allowed_end = _latest_allowed_option_bar_end(
+        current,
+        config.market_data.option_bars_delay_minutes,
+    )
 
     start_value = args.start if args.start is not None else config.backtest.start
     end_value = args.end if args.end is not None else config.backtest.end
 
     if _is_auto_datetime(end_value):
-        end = _infer_auto_backtest_end(symbols, current)
+        end = _infer_auto_backtest_end(symbols, latest_allowed_end)
     else:
-        end = _parse_datetime(str(end_value), date_as_end=True)
+        end = min(_parse_datetime(str(end_value), date_as_end=True), latest_allowed_end)
 
     if _is_auto_datetime(start_value):
         start = end - timedelta(days=config.backtest.auto_lookback_days)
@@ -293,6 +297,12 @@ def _resolve_backtest_window(
 
 def _is_auto_datetime(value: object) -> bool:
     return str(value).strip().lower() in {"", "auto"}
+
+
+def _latest_allowed_option_bar_end(now: datetime, delay_minutes: int) -> datetime:
+    if delay_minutes <= 0:
+        return now
+    return now - timedelta(minutes=delay_minutes)
 
 
 def _infer_auto_backtest_end(symbols: list[str], now: datetime) -> datetime:

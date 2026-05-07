@@ -19,12 +19,15 @@ def retry_call(
     base_delay_seconds: float = 0.5,
     retry_exceptions: tuple[type[BaseException], ...] = (Exception,),
     operation_name: str = "operation",
+    should_retry: Callable[[BaseException], bool] | None = None,
 ) -> T:
     last_error: BaseException | None = None
     for attempt in range(1, attempts + 1):
         try:
             return operation()
         except retry_exceptions as exc:
+            if should_retry is not None and not should_retry(exc):
+                raise
             last_error = exc
             if attempt >= attempts:
                 break
@@ -33,4 +36,3 @@ def retry_call(
             sleep(delay)
     assert last_error is not None
     raise last_error
-

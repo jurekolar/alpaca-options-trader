@@ -83,6 +83,15 @@ set this in TOML:
 stock_feed = "sip"
 ```
 
+Historical option bars default to a 16-minute delay so accounts without Algo
+Trader Plus do not request the latest real-time OPRA window. Set this to `0`
+only if the account has that subscription:
+
+```toml
+[market_data]
+option_bars_delay_minutes = 0
+```
+
 ## Commands
 
 ```bash
@@ -162,6 +171,7 @@ run fails clearly.
 
 By default, backtest dates are `auto`: the CLI uses the supplied OCC option
 symbols to choose a recent lookback window, capped at expiration for expired
+contracts and delayed by `market_data.option_bars_delay_minutes` for current
 contracts. Override the window when needed:
 
 ```bash
@@ -179,6 +189,10 @@ python cli.py backtest \
 - `subscription does not permit querying recent SIP data`: keep
   `[market_data] stock_feed = "iex"` for non-SIP accounts, or switch to `sip`
   only after adding the required Alpaca market data subscription.
+- `OPRA agreement is not signed`: Alpaca can return this when a historical
+  option bars request includes the latest 15 minutes and the account lacks Algo
+  Trader Plus. Keep `market_data.option_bars_delay_minutes = 16`, omit `--end`,
+  or use an older explicit end time.
 - `options market data entitlement could not be verified`: your account likely
   lacks option market data access, or the probe request failed.
 - `options trading level too low`: check `python cli.py status`. Long options

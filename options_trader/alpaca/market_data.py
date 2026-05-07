@@ -70,6 +70,11 @@ def _int_or_none(value: Any) -> int | None:
         return None
 
 
+def _is_realtime_opra_entitlement_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "opra agreement" in message and "not signed" in message
+
+
 class AlpacaMarketData:
     def __init__(
         self,
@@ -200,8 +205,16 @@ class AlpacaMarketData:
             response = retry_call(
                 lambda: self.option_data_client.get_option_bars(request),
                 operation_name=f"historical option bars {','.join(option_symbols)}",
+                should_retry=lambda exc: not _is_realtime_opra_entitlement_error(exc),
             )
         except Exception as exc:  # noqa: BLE001
+            if _is_realtime_opra_entitlement_error(exc):
+                raise HistoricalDataUnavailableError(
+                    "Alpaca rejected this option bars request as real-time OPRA data. "
+                    "Use an end time at least 15 minutes old, omit --end, or set "
+                    "market_data.option_bars_delay_minutes = 0 only with Algo Trader "
+                    "Plus. No synthetic fallback used."
+                ) from exc
             raise HistoricalDataUnavailableError(
                 f"Unable to fetch Alpaca historical option bars for {option_symbols}: {exc}"
             ) from exc

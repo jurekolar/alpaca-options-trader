@@ -7,6 +7,7 @@ import unittest
 from alpaca.data.enums import DataFeed
 
 from options_trader.alpaca.market_data import AlpacaMarketData
+from options_trader.exceptions import HistoricalDataUnavailableError
 
 
 class CapturingStockDataClient:
@@ -21,6 +22,15 @@ class CapturingStockDataClient:
                 SimpleNamespace(close=101.0, high=102.0, low=100.0, volume=1100),
             ]
         }
+
+
+class RealtimeOpraEntitlementOptionDataClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def get_option_bars(self, _request):
+        self.calls += 1
+        raise RuntimeError('{"message":"OPRA agreement is not signed"}')
 
 
 class MarketDataTests(unittest.TestCase):
@@ -38,6 +48,17 @@ class MarketDataTests(unittest.TestCase):
         self.assertEqual(stock_client.request.feed, DataFeed.IEX)
         self.assertEqual(underlying.price, 101.0)
         self.assertIsNotNone(technical)
+
+    def test_historical_option_bars_do_not_retry_realtime_opra_entitlement(self) -> None:
+        option_client = RealtimeOpraEntitlementOptionDataClient()
+        market_data = AlpacaMarketData(option_data_client=option_client)
+        start = datetime(2026, 5, 7, tzinfo=timezone.utc)
+        end = datetime(2026, 5, 8, tzinfo=timezone.utc)
+
+        with self.assertRaisesRegex(HistoricalDataUnavailableError, "real-time OPRA"):
+            market_data.get_historical_bars(["SPY260508C00500000"], start, end)
+
+        self.assertEqual(option_client.calls, 1)
 
 
 if __name__ == "__main__":

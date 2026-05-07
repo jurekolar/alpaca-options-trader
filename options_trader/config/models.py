@@ -223,6 +223,7 @@ class BacktestConfig:
 @dataclass(frozen=True)
 class MarketDataConfig:
     stock_feed: str = "iex"
+    option_bars_delay_minutes: int = 16
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "MarketDataConfig":
@@ -233,7 +234,13 @@ class MarketDataConfig:
                 f"Unsupported market_data.stock_feed={stock_feed!r}; "
                 f"expected one of {', '.join(sorted(valid_feeds))}"
             )
-        return cls(stock_feed=stock_feed)
+        option_bars_delay_minutes = _int(data.get("option_bars_delay_minutes"), 16)
+        if option_bars_delay_minutes < 0:
+            raise ValueError("market_data.option_bars_delay_minutes must be at least 0")
+        return cls(
+            stock_feed=stock_feed,
+            option_bars_delay_minutes=option_bars_delay_minutes,
+        )
 
 
 @dataclass(frozen=True)

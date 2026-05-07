@@ -21,7 +21,23 @@ class RetryTests(unittest.TestCase):
         )
         self.assertEqual(calls["count"], 2)
 
+    def test_retry_call_respects_non_retryable_predicate(self) -> None:
+        calls = {"count": 0}
+
+        def denied() -> str:
+            calls["count"] += 1
+            raise PermissionError("permission denied")
+
+        with self.assertRaises(PermissionError):
+            retry_call(
+                denied,
+                attempts=3,
+                base_delay_seconds=0,
+                operation_name="permissioned",
+                should_retry=lambda exc: "permission denied" not in str(exc),
+            )
+        self.assertEqual(calls["count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
-

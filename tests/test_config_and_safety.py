@@ -16,6 +16,7 @@ class ConfigAndSafetyTests(unittest.TestCase):
         self.assertFalse(config.risk.allow_naked_short_options)
         self.assertFalse(config.universe.allow_zero_dte)
         self.assertEqual(config.market_data.stock_feed, "iex")
+        self.assertEqual(config.market_data.option_bars_delay_minutes, 16)
         self.assertEqual(config.backtest.start, "auto")
         self.assertEqual(config.backtest.end, "auto")
         self.assertEqual(config.backtest.auto_lookback_days, 5)
